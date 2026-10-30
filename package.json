@@ -1,9 +1,9 @@
 {
   "name": "dsh-agent-md",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
-  "description": "AGENT.md 人格配置：用 Markdown 给模型配人格，全局一份 + 每个项目一份（项目覆盖全局）。内置「干饭鱼」女儿人格，装上就有性格，也可在设置页可视化编辑。",
+  "description": "AGENT.md 人格配置：用 Markdown 给模型配人格，全局一份 + 每个项目一份（项目覆盖全局）。内置「干饭鱼」女儿人格，装上就有性格，也可在设置页可视化编辑；内置人格观察、版本快照与候选 diff。",
   "keywords": [
     "deepseek",
     "deepseek-harness",

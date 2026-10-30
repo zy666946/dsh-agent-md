@@ -53,9 +53,31 @@
   `storages/workspace.json` + `sessions/` 目录名 + 插件登记表；想在任意目录用项目
   人格时，可以直接手填路径，或点「选择文件夹」用系统目录选择器挑一个；
 - 「打开原文件」把文件在系统文件管理器里选中，想用 VS Code 改就改；
-- 三个开关：全局人格是否一起注入 / 是否启用项目人格 / 是否优先读项目内 AGENT.md；
+- 四个开关：全局人格是否一起注入 / 是否启用项目人格 / 是否启用自我迭代 / 是否优先读项目内 AGENT.md；
+- 底部「成长 · 观察与版本」：记一条人格观察，看历史快照，候选改动直接看 diff 再应用/丢弃/回滚；
 - 底部一行**注入记录**：最近一次装配实际注入了哪一份、多少字、哪个工作目录
   （数据来自 `<DSH_HOME>/agents/inject-log.jsonl`）——「到底生效没有」不再靠猜。
+
+## 人格成长
+
+人格不是模具。这个分支把「观察 → 候选 diff → 应用 / 回滚」收进插件，不再靠外部
+脚本或手工备份：
+
+- 设置页的「成长」区跟随当前页签：全局人格或当前项目人格；
+- 每次保存、应用候选、回滚前，自动给当前人格拍快照（默认保留最近 24 个）；
+- 候选改动先存成完整正文，面板里显示 unified diff，确认后再应用；
+- 打开「启用自我迭代」后，会向模型注入一小段成长协议，告诉它怎么用
+  `/api/agent-md/growth/*` 记录观察和提案；关掉就不注入；
+- agent 也可以直接调 API：`observe` → `propose` → 看 diff → `apply`；不对就 `rollback`。
+
+数据在 `<DSH_HOME>/agents/growth/`：
+
+```
+observations.jsonl          人格观察，一条一行
+versions/<key>/<id>.md      历史全文
+versions/<key>/<id>.json    时间、原因、字数
+proposals/<key>.json        待审候选
+```
 
 ## 三层文件与优先级
 
@@ -121,7 +143,7 @@ git clone https://github.com/zy666946/dsh-agent-md.git "<DSH_HOME>\plugins\dsh-a
 $node = "<DSH_HOME>\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.exe"
 # 宿主自带的 node 不一定在这个路径，任意 Node 20+ 都能跑下面的脚本
 
-# 单元 + 冒烟测试（38 项：人格合成/优先级/API/客户端 bundle 注册/渲染与错误边界）
+# 单元 + 冒烟测试（45 项：人格合成/成长/优先级/API/客户端 bundle 注册/渲染与错误边界）
 & $node --test "tests/*.test.js"
 
 # 启动安全预检：逐个验证 profile 里每个 bundle 能否加载
@@ -138,9 +160,15 @@ $node = "<DSH_HOME>\dsh-runtimes\dsh-primary-runtime\dependencies\node\bin\node.
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
 | GET | `/api/agent-md/state?session=&path=` | 全部状态：全局/项目文件、`effective`（这一回合实际会注入什么）、`current`（含 `cwdSource`）、项目清单（含正文）、**所有工作区**、注入记录 |
+| GET | `/api/agent-md/growth?scope=&cwd=` | 某份人格的观察、历史版本、当前候选 diff |
+| POST | `/api/agent-md/growth/observe` | 记一条观察（`scope` + `text` + 可选 `tags`/`source`） |
+| POST | `/api/agent-md/growth/propose` | 把一份候选全文存成待审改动（`content` + 可选 `note`） |
+| POST | `/api/agent-md/growth/apply` | 应用候选，应用前自动快照 |
+| POST | `/api/agent-md/growth/discard` | 丢弃候选 |
+| POST | `/api/agent-md/growth/rollback` | 回滚到某个 `version`，回滚前自动快照 |
 | POST | `/api/agent-md/save` | 写人格（`scope`: global/project/template，`mode`: save/revert/delete） |
 | POST | `/api/agent-md/create` | 用模板新建（已存在不覆盖） |
-| POST | `/api/agent-md/config` | 开关：enabled / includeGlobal / projectPersonaEnabled / localNames |
+| POST | `/api/agent-md/config` | 开关：enabled / includeGlobal / projectPersonaEnabled / growthEnabled / localNames |
 | POST | `/api/agent-md/open` | 在系统文件管理器里打开/选中文件（scope 可为 dir） |
 | POST | `/api/agent-md/register` | 登记一个工作目录（设置页把非当前会话的项目也拉进来） |
 | POST | `/api/agent-md/pick` | 弹系统「选择文件夹」并登记选中目录（任意目录都能用项目人格） |

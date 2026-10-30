@@ -13,7 +13,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -272,10 +272,24 @@ test('设置页在数据态真的渲染出可编辑界面（喂真实宿主响�
   const stateBody = await callHost(route, { url: `/api/agent-md/state?path=${encodeURIComponent(ws)}` })
   assert.ok(stateBody.bridge.count >= 1, '宿主必须记录握手（bridge）')
 
+  // 成长区也喂真数据：一条观察 + 一份候选，验证面板不是只画标题
+  await callHost(route, {
+    method: 'POST',
+    url: '/api/agent-md/growth/observe',
+    body: { scope: 'global', text: '测试观察：先接情绪', tags: ['测试'] },
+  })
+  await callHost(route, {
+    method: 'POST',
+    url: '/api/agent-md/growth/propose',
+    body: { scope: 'global', content: '# 全局人格\n\n说话简洁。\n\n- 新的一条\n', note: '测试候选' },
+  })
+  const growthBody = await callHost(route, { url: '/api/agent-md/growth?scope=global' })
+
   // 加载 bundle，把真响应喂进去
   const { exported, hooks, setFetch } = loadClient()
   setFetch(async (url) => {
-    const body = String(url).includes('/state') ? stateBody : { ok: true }
+    const target = String(url)
+    const body = target.includes('/growth') ? growthBody : (target.includes('/state') ? stateBody : { ok: true })
     return { ok: true, status: 200, text: async () => JSON.stringify(body) }
   })
 
@@ -302,7 +316,7 @@ test('设置页在数据态真的渲染出可编辑界面（喂真实宿主响�
     '至少要有保存与打开原文件两个按钮；实到 ' + countByType(tree, 'ActionButton').length
       + '；树里出现过的类型 = ' + [...names].join(','),
   )
-  assert.equal(countByType(tree, 'ToggleRow').length, 3, '三个开关')
+  assert.equal(countByType(tree, 'ToggleRow').length, 4, '四个开关')
   assert.equal(collectByClass(tree, 'am-root').length, 1, '根容器在')
   assert.equal(collectByClass(tree, 'am-live').length, 1, '必须有连接指示灯')
   assert.equal(collectByClass(tree, 'am-live-stale').length, 0, '刚请求过，指示灯应是「已连接」')
@@ -316,6 +330,10 @@ test('设置页在数据态真的渲染出可编辑界面（喂真实宿主响�
   assert.ok(text.includes('本页已连接宿主'), '连接回执在')
   assert.ok(text.includes('全局人格'), '全局页签在')
   assert.ok(text.includes('项目人格'), '项目页签在')
+  assert.ok(text.includes('成长 · 观察与版本'), '成长区在')
+  assert.ok(text.includes('测试观察：先接情绪'), '观察列表在')
+  assert.ok(text.includes('测试候选'), '候选说明在')
+  assert.equal(collectByClass(tree, 'am-diff').length, 1, '候选 diff 在')
   assert.ok(text.includes('打开原文件'), '打开原文件按钮在')
   assert.ok(text.includes('保存'), '保存按钮在')
   assert.ok(text.includes(ws), '当前工作目录显示出来了')
@@ -330,6 +348,7 @@ test('设置页在「一份人格都没有」时给出新建引导而不是空�
   process.env.DSH_HOME = emptyHome
   try {
     const route = startHost()
+    try { unlinkSync(persona.globalPath()) } catch { /* 本来就没有 */ }
     const body = await callHost(route, { url: '/api/agent-md/state' })
     assert.equal(body.global.exists, false, '空家目录下全局人格不存在')
 
